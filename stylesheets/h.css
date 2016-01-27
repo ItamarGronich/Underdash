@@ -1,0 +1,8 @@
+/* line 3, ../sass/h.scss */
+body {
+  background: red;
+}
+/* line 6, ../sass/h.scss */
+body ul:first-child li {
+  border: solid blue;
+}

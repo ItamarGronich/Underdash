@@ -71,23 +71,89 @@ var Underdash = (function(){
             return arr;
         }
 
+        /*======================================
+        * Object Oriented methods
+        * =======================================*/
+
+        function firstKey(obj){
+            var key = Object.keys(obj)[0];
+            if (!key) {
+                return -1
+            }
+            return key;
+        }
+
+        function lastKey(obj){
+            var arr = Object.keys(obj),
+                pos = arr.length - 1;
+            if (pos > -1){
+                return arr[pos];
+            } else {
+                return -1;
+            }
+        }
+
+        function values(obj){
+            var arr = [];
+            for(var key in obj){
+                arr.push(obj[key]);
+            }
+            return arr;
+        }
+
+
         return {
             flatten: flatten,
             shuffle: shuffle,
-            rd: removeDuplicates
+            rd: removeDuplicates,
+            firstKey: firstKey,
+            lastKey: lastKey,
+            values: values
         }
     })();
 
-
+    /**
+     * @module Event Bus  - central event bus using a PUB/SUB architecture.
+     *
+     * @API :
+     *      *@method on   - subscribe to event .adds an event listener with a callback function and a user
+     *          @see on.
+     *
+     *      *@method off  - unsubscribe from event .removes event listener. provide type and callback / user
+     *          @see off.
+     *
+     *      *@metohd emit - Publish event. emits the event. arguments by either type / type + user
+     *          @see emit.
+     *
+     * @type {{BusEvent, on, off, emit, events}} <== all functions run in the module
+     */
     var eventBus = (function(){
 
         /**
-         *
          * @Object - the events object will hold all events and their listeners and handlers
+         *
+         * structure is events >
+         *                  type1: >
+         *                          [
+         *
+         *                          {user1 : callback},
+         *                          {user2 : callback}
+         *                          ....
+         *
+         *                          ]
+         *                   type2: >
+         *                          [
+         *
+         *                          {user1 : callback},
+         *                          {user2 : callback}
+         *                          ....
+         *
+         *                          ]
+         *
          */
         var events ={};
 
-
+        // error handler function. checks if the 'type' argument was specified correctly
         function ifNoType(type){
             if (!type) {
                 throw new Error('first argument: "type" missing.');
@@ -99,14 +165,20 @@ var Underdash = (function(){
         }
 
 
+
         /**
-         *
-         * @param type      - a string containing the name of the desired event
-         * @param options   - an Object containing desired customisable properties to set on event.
          * @constructor BusEvent constructor function.
          *
          *              Is used for constructing BusEvent objects to fire with
          *              dispatch
+         * @param type      - a string containing the name of the desired event
+         * @param options   - an Object containing desired customisable properties to set on event.
+         * @prototype  {{getType, getTimeStamp, getTarget, setDetail, getDetail}}
+         * @see getType
+         * @see getTimeStamp
+         * @see getTarget
+         * @see getDetail
+         * @see setDetail
          */
         function BusEvent(type, options){
 
@@ -157,8 +229,15 @@ var Underdash = (function(){
             return this.detail;
         };
 
-
+        /**
+         * @method on - subscribe to event.
+         *
+         * @param type     - *Required* a sting with the name of the desired event to listen to
+         * @param callback - *Required* a function to deploy once event is fired
+         * @param user     - *Required* a string containing the name of the module
+         */
         function on(type, callback, user){
+
 
             ifNoType(type);
 
@@ -174,17 +253,107 @@ var Underdash = (function(){
                 handlerObj[user] = callback;
 
             events[type] = events[type] || [];
-            debugger;
             events[type].push(handlerObj);
         }
 
-        function off(type, callback, user){
 
+        /**
+         * @method Unsubscribe - this method unsubscribes a single handler function, a full user
+         *                       or a whole event depending on the arguments provided:
+         *
+         *                       @param circle === 'function'- if circle is a function then off(); removes only the
+         *                                                     provided function from the listeners array
+*                                @param circle === 'string'  - if circle is a string then off(); removes all the
+         *                                                     listeners that have the specified user
+         *                                                     from the listeners array
+*                                @param all === true         - if all is a truthy value, off will remove entire event
+         *                                                     from the events bank.
+         *
+         * @param type - Required! can only be a string
+         * @param circle - can be one of the following:
+         *                 *@type function - the callback function you wish to remove
+         *
+         *                 *@type string   - a string reprisenting the name of the user
+         *                                   you wish to unsubscribe
+         * @param all optional if is a true value then removes entire event from the event bank
+         * @returns {number} the new legnth of the modified callback array
+         */
+        function off(type, circle, all){
+            var callback,
+                user,
+                arr;
 
+            ifNoType(type);
+
+            if (all) {
+                delete events[type];
+                return;
+            }
+
+            if (typeof circle === 'function'){
+                callback = circle;
+            } else if(typeof circle === 'string') {
+                user = circle;
+            } else {
+                throw new TypeError('second argument must either be a user string stating the name of the listener module or a callback function')
+            }
+
+            if (!circle) {
+                throw new TypeError('Both callback and user are missing. Must specify either one as the second argument.')
+            }
+
+            arr = events[type];
+            for (var i = (arr.length -1) ; i >= 0; i-- ){
+                if (user) {
+                    if (Object.keys(arr[i])[0] === user) {
+                         arr.splice(i, 1);
+                    }
+                } else {
+                    if (arr[i][Object.keys(arr[i])[0]] === callback) {
+                        arr.splice(i, 1);
+                    }
+                }
+            }
+
+            return events[type].length;
 
         }
 
-        function emit() {
+
+        /**
+         * @method Publish - if no user specified fires all handlers under the event.
+         *                   if user specified fires all handlers of the specified event
+         *                   that can be associated with the specified user.
+         * @param event - a BusEvent object. created with the BusEvent constructor.
+         * @param user  - a string representing the user that it's handlers should be fired.
+         */
+        function emit(event, user) {
+
+            if (!event) {
+                throw new TypeError('event argument missing. must be a BusEvent object');
+            }
+
+            if (!(event instanceof BusEvent)){
+                throw new TypeError('event must be of type BusEvent object use BusEvent to construct such object.');
+            }
+
+            if (user && typeof user !== 'string'){
+                throw new TypeError('user argument must be a string containing the module name')
+            }
+
+            var callbackArr = events[event.type];
+
+            callbackArr.forEach(function(el){
+                if(user){
+                    if(el.hasOwnProperty(user)){
+                        el[user](event);
+                    }
+                } else {
+                    el[Object.keys(el)[0]](event);
+                }
+
+            });
+
 
         }
 
@@ -194,6 +363,7 @@ var Underdash = (function(){
             BusEvent: BusEvent,
             on: on,
             off: off,
+            emit: emit,
             events: events
         }
 
@@ -203,8 +373,12 @@ var Underdash = (function(){
         rd: UTILS.rd,
         flatten: UTILS.flatten,
         shuffle: UTILS.shuffle,
-        eventBus: eventBus
-
+        eventBus: eventBus,
+        on: eventBus.on,
+        off: eventBus.off,
+        emit: eventBus.emit,
+        BusEvent: eventBus.BusEvent,
+        events: eventBus.events
     }
 })();
 

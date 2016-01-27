@@ -1,0 +1,10 @@
+@import "../../../../../var/lib/gems/2.1.0/gems/compass-core-1.0.3/stylesheets/compass";
+
+body {
+  background: red;
+  ul:first-child {
+    li{
+      border: solid blue;
+    }
+  }
+}
